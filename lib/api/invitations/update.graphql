@@ -1,0 +1,10 @@
+mutation($name: String, $password: String!, $token: String!) {
+  acceptAdminInvitation(name: $name, password: $password, token: $token) {
+    token
+    errors {
+      message
+      path
+      type
+    }
+  }
+}

@@ -13,19 +13,17 @@
       (#{team.admins.map{|a| mail_to h(a.email), h(a.display_name)}.to_sentence.html_safe})
       %ul
         - team.apps.each do |app|
-          %li= link_to app.name, app
-  - if current_admin.super_admin?
-    %li
-      Cuttlefish team
-      %ul
-        %li= link_to App.cuttlefish.name, App.cuttlefish
+          %li= link_to app.name, app_path(app.id)
+  %li
+    Cuttlefish team
+    %ul
+      %li= link_to @cuttlefish_app.name, app_path(@cuttlefish_app.id)
 
-- if policy(:team).invite?
-  %h2 Invite a new team
+%h2 Invite a new team
 
-  = form_for @admin, url: invite_teams_path(@admin), html: {method: :post} do |f|
-    .control-group
-      = f.label :email
-      = f.text_field :email, placeholder: "Email"
+= form_for @admin, as: :admin, url: invite_teams_path(@admin), html: {method: :post} do |f|
+  .control-group
+    = f.label :email
+    = f.text_field :email, placeholder: "Email"
 
-    = f.submit "Send an invitation", class: "btn btn-primary"
+  = f.submit "Send an invitation", class: "btn btn-primary"

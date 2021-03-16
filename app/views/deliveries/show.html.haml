@@ -2,6 +2,8 @@
   %h1= @delivery.subject
 
 %p
+  - if @delivery.ignore_blocked_addresses
+    %span.label.label-warning Ignore Deny List
   %span{class: label_class(@delivery.status)}
     = status_name(@delivery.status)
   - if @delivery.opened?
@@ -13,16 +15,16 @@
   %tr
     %td.key
       %strong App
-    %td= link_to @delivery.app_name, @delivery.app
+    %td= link_to @delivery.app.name, app_path(@delivery.app.id)
   %tr
     %td.key
       %strong From
-    %td= link_to @delivery.from, from_address_path(@delivery.from_address)
+    %td= link_to @delivery.from, from_address_path(@delivery.from)
   %tr
     %td.key
       %strong To
     %td
-      = link_to @delivery.address.text, to_address_path(@delivery.address)
+      = link_to @delivery.to, to_address_path(@delivery.to)
   %tr
     %td.key
       %strong Subject
@@ -31,13 +33,10 @@
   %tr
     %td.key
       %strong
-        - if @delivery.sent?
-          Sent
-        - else
-          Created
+        Created
     %td
-      = time_ago_in_words(@delivery.created_at)
-      ago (#{@delivery.created_at.to_formatted_s(:long)  })
+      = time_ago_in_words(Time.zone.parse(@delivery.created_at))
+      ago (#{Time.zone.parse(@delivery.created_at).to_formatted_s(:long)  })
   - if @delivery.status == "delivered" || @delivery.status == "soft_bounce" || @delivery.status == "hard_bounce"
     %tr
       %td.key
@@ -45,7 +44,7 @@
           = status_name(@delivery.status)
       %td
         = link_to "#log", "data-toggle" => "collapse" do
-          = distance_of_time_in_words(@delivery.created_at, @delivery.postfix_log_lines.first.time, include_seconds: true)
+          = distance_of_time_in_words(@delivery.created_at, @delivery.delivery_events.first.time, include_seconds: true)
           after being sent
           %i.fa.fa-plus-square
         .collapse{id: "log"}
@@ -80,42 +79,52 @@
           %i.fa.fa-plus-square
         .collapse{id: "clicked"}
           = render partial: "click_events", locals: {delivery: @delivery}
+  - unless @delivery.meta_values.empty?
+    %tr
+      %td.key
+        %strong
+          Metadata
+      %td
+        - @delivery.meta_values.each do |meta_value|
+          %div
+            = link_to meta_value.key, deliveries_path(key: meta_value.key)
+            = meta_value.value
 
 %hr
-- if @delivery.data.nil?
+- unless @delivery.content?
   %p
     %em
       Full text of email is not available.
       = link_to "Why?", "#why_help", "data-toggle" => "collapse"
   %p#why_help.collapse
-    The full text of only the most recent #{Rails.configuration.max_no_emails_to_store} emails for each app are stored. Keeping things around for ever is not good for privacy or disk space. It still gives
+    The full text of only the most recent #{@configuration.max_no_emails_to_store} emails for each app are stored. Keeping things around for ever is not good for privacy or disk space. It still gives
     you room to look at recent emails to figure our any problems if you need to.
 
 - else
   %ul.nav.nav-pills
-    - if @delivery.html_part && @delivery.text_part
+    - if @delivery.content.html && @delivery.content.text
       %li.active= link_to "HTML", "#html", data: {toggle: "pill"}
       %li= link_to "Text", "#text", data: {toggle: "pill"}
-    - elsif @delivery.html_part
+    - elsif @delivery.content.html
       %li.active= link_to "HTML", "#html", data: {toggle: "pill"}
     - else
       %li.active= link_to "Text", "#text", data: {toggle: "pill"}
     %li= link_to "Source", "#source", data: {toggle: "pill"}
 
   .tab-content
-    - if @delivery.html_part && @delivery.text_part
+    - if @delivery.content.html && @delivery.content.text
       %div.tab-pane.active#html
-        .well= clean_html_email_for_display(@delivery.html_part)
+        .well= clean_html_email_for_display(@delivery.content.html)
       %div.tab-pane#text
-        %pre= @delivery.text_part
-    - elsif @delivery.html_part
+        %pre= @delivery.content.text
+    - elsif @delivery.content.html
       %div.tab-pane.active#html
-        .well= clean_html_email_for_display(@delivery.html_part)
+        .well= clean_html_email_for_display(@delivery.content.html)
     - else
       %div.tab-pane.active#text
-        %pre= @delivery.text_part
+        %pre= @delivery.content.text
     %div.tab-pane#source
-      %pre= @delivery.data
+      %pre= @delivery.content.source
 
     %p.muted
       This shows the original email as sent by you to Cuttlefish

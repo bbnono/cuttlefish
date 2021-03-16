@@ -1,8 +1,24 @@
 ---
+# We need python 2 while we're on this version of Ansible
 - hosts: all
-  sudo: true
+  become: true
+  gather_facts: False
+  tasks:
+  - name: install python 2
+    raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+    changed_when: False
+
+- hosts: all
+  pre_tasks:
+    - name: Verify Ansible meets version requirements.
+      assert:
+        that: ansible_version.major == 2 and ansible_version.minor == 8
+        msg: >
+          "This currently works with Ansible 2.8"
+
+- hosts: all
+  become: true
   #user: root
   roles:
-    - {role: deploy-user, github_users: ['mlandauer', 'henare', 'equivalentideas']}
-    - postfix
+    - {role: deploy-user, github_users: ['mlandauer', 'henare', 'jamezpolley']}
     - cuttlefish-app

@@ -1,0 +1,18 @@
+query($id: ID!) {
+  app(id: $id) {
+    id
+    fromDomain
+    dkimEnabled
+    dkimDnsRecord {
+      configured
+      lookupValue
+      targetValue
+      name
+      upgradeRequired
+    }
+  }
+  viewer {
+    email
+    siteAdmin
+  }
+}

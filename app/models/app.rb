@@ -1,23 +1,33 @@
+# frozen_string_literal: true
+
 class App < ActiveRecord::Base
   has_many :emails
   has_many :deliveries
   belongs_to :team
 
-  validates :name, presence: true, format: {with: /\A[a-zA-Z0-9_ ]+\z/, message: "Only letters, numbers, spaces and underscores"}
+  validates :name, presence: true,
+                   format: {
+                     with: /\A[a-zA-Z0-9_ ]+\z/,
+                     message: "only letters, numbers, spaces and underscores"
+                   }
   validate :custom_tracking_domain_points_to_correct_place
+  validate :validate_dkim_settings
+  validate :webhook_url_works
+  # Validating booleans so that they can't have nil values.
+  # See https://stackoverflow.com/questions/34759092/to-validate-or-not-to-validate-boolean-field
+  validates :open_tracking_enabled, inclusion: { in: [true, false] }
+  validates :click_tracking_enabled, inclusion: { in: [true, false] }
+  validates :dkim_enabled, inclusion: { in: [true, false] }
+  validates :cuttlefish, inclusion: { in: [true, false] }
+  validates :legacy_dkim_selector, inclusion: { in: [true, false] }
 
   before_create :set_smtp_password
+  before_validation :set_webhook_key
   after_create :set_smtp_username
 
   def self.cuttlefish
-    App.find_by(cuttlefish: true) || App.create(cuttlefish: true, name: "Cuttlefish")
-  end
-
-  def new_password!
-    unless smtp_password_locked?
-      set_smtp_password
-      save!
-    end
+    App.find_by(cuttlefish: true) ||
+      App.create(cuttlefish: true, name: "Cuttlefish")
   end
 
   def from_domain
@@ -28,57 +38,37 @@ class App < ActiveRecord::Base
     end
   end
 
-  def dkim_key
-    OpenSSL::PKey::RSA.new(dkim_private_key)
+  def dkim_selector_legacy_value
+    "cuttlefish"
   end
 
-  def dkim_public_key
-    # We can generate the public key from the private key
-    dkim_key.public_key.to_pem
+  def dkim_selector_current_value
+    "#{smtp_username}.cuttlefish"
   end
 
-  # The string that needs to be inserted in DNS.
-  # This string format works at least for the service DNS Made Easy.
-  def dkim_public_key_dns_dnsmadeeasy
-    App.quote_long_dns_txt_record("k=rsa; p=" + dkim_public_key.split("\n")[1..-2].join)
-  end
-
-  def dkim_public_key_dns_generic
-    dkim_public_key_dns_cloudflare
-  end
-
-  def dkim_public_key_dns_cloudflare
-    dkim_public_key_dns_dnsmadeeasy.gsub('"', '')
-  end
-
-  # This is the expected form of the correctly configured TXT entry when we are doing a DNS lookup
-  def dkim_public_key_dns_lookup
-    dkim_public_key_dns_dnsmadeeasy.gsub('"', '')
-  end
-
-  def dkim_dns_entry
-    # Use our default nameserver
-    begin
-      Resolv::DNS.new.getresource("cuttlefish._domainkey.#{from_domain}", Resolv::DNS::Resource::IN::TXT).strings.join
-    rescue Resolv::ResolvError
-      nil
+  def dkim_selector
+    if legacy_dkim_selector
+      dkim_selector_legacy_value
+    else
+      dkim_selector_current_value
     end
   end
 
   def dkim_private_key
     update_attributes(dkim_private_key: OpenSSL::PKey::RSA.new(2048).to_pem) if read_attribute(:dkim_private_key).nil?
-    read_attribute(:dkim_private_key)
+    OpenSSL::PKey::RSA.new(read_attribute(:dkim_private_key))
   end
 
-  def dkim_dns_configured?
-    dkim_dns_entry == dkim_public_key_dns_lookup
-  end
-
-  def tracking_domain
-    if custom_tracking_domain?
-      custom_tracking_domain
+  def tracking_domain_info
+    if Rails.env.development?
+      { protocol: "http", domain: "localhost:3000" }
+    elsif custom_tracking_domain?
+      # We can't use https with a custom tracking domain because otherwise
+      # we would need an SSL certificate installed for every custom domain used
+      # and that's going to be way too much hassle for users
+      { protocol: "http", domain: custom_tracking_domain }
     else
-      Rails.configuration.cuttlefish_domain
+      { protocol: "https", domain: Rails.configuration.cuttlefish_domain }
     end
   end
 
@@ -87,47 +77,109 @@ class App < ActiveRecord::Base
     custom_tracking_domain.present?
   end
 
-  private
-
-  # If a DNS TXT record is longer than 255 characters it needs to be split into several
-  # separate strings
-  def self.quote_long_dns_txt_record(text)
-    text.scan(/.{1,255}/).map{|s| '"' + s + '"'}.join
-  end
-
   def self.lookup_dns_cname_record(domain)
     # Use our default nameserver
-    begin
-      n = Resolv::DNS.new.getresource(domain, Resolv::DNS::Resource::IN::CNAME).name
-      # Doing this to maintain compatibility with previous implementation
-      # of this method
-      if n.absolute?
-        n.to_s + "."
-      else
-        n.to_s
-      end
-    rescue Resolv::ResolvError
-      nil
+    n = Resolv::DNS.new.getresource(
+      domain, Resolv::DNS::Resource::IN::CNAME
+    ).name
+    # Doing this to maintain compatibility with previous implementation
+    # of this method
+    if n.absolute?
+      "#{n}."
+    else
+      n.to_s
     end
+  rescue Resolv::ResolvError
+    nil
+  end
+
+  def set_webhook_key
+    # Only set a webhook key if it hasn't been set already.
+    # This makes testing a little more straightforward
+    self.webhook_key = generate_key if webhook_key.nil?
+  end
+
+  private
+
+  def validate_dkim_settings
+    return unless dkim_enabled?
+
+    if from_domain.present?
+      # Check that DNS is setup
+      dkim = DkimDns.new(
+        domain: from_domain,
+        private_key: dkim_private_key,
+        selector: dkim_selector
+      )
+      return if dkim.dkim_dns_configured?
+
+      errors.add(
+        :from_domain,
+        "doesn't have a DNS record configured correctly for #{dkim.dkim_domain}"
+      )
+    else
+      errors.add(
+        :dkim_enabled,
+        "can't be enabled if from_domain is not set"
+      )
+    end
+  end
+
+  def cname_domain
+    # In DNS speak putting a "." after the domain makes it a full domain
+    # name rather than just relative to the current higher level domain
+    "#{Rails.configuration.cuttlefish_domain}."
+  end
+
+  def valid_dns_for_custom_tracking_domain
+    App.lookup_dns_cname_record(custom_tracking_domain) == cname_domain
   end
 
   def custom_tracking_domain_points_to_correct_place
-    # In DNS speak putting a "." after the domain makes it a full domain name rather than just relative
-    # to the current higher level domain
-    cname_domain = Rails.configuration.cuttlefish_domain + "."
-    unless custom_tracking_domain.blank?
-      if App.lookup_dns_cname_record(custom_tracking_domain) != cname_domain
-        errors.add(:custom_tracking_domain, "Doesn't have a CNAME record that points to #{cname_domain}")
-      end
-    end
+    return if custom_tracking_domain.blank?
+    return if valid_dns_for_custom_tracking_domain
+
+    errors.add(
+      :custom_tracking_domain,
+      "doesn't have a CNAME record that points to #{cname_domain}"
+    )
+  end
+
+  def webhook_url_works
+    return if webhook_url.nil?
+
+    WebhookServices::PostTestEvent.call(
+      url: webhook_url, key: webhook_key
+    )
+  rescue RestClient::ExceptionWithResponse => e
+    errors.add(
+      :webhook_url,
+      "returned #{e.response.code} code when doing POST to #{webhook_url}"
+    )
+  rescue SocketError => e
+    errors.add(
+      :webhook_url,
+      "error when doing test POST to #{webhook_url}: #{e}"
+    )
   end
 
   def set_smtp_password
-    self.smtp_password = Digest::MD5.base64digest(rand.to_s + Time.now.to_s)[0...20]
+    # Only set if it hasn't been set already
+    # This makes testing a little more straightforward
+    self.smtp_password = generate_key if smtp_password.nil?
   end
 
   def set_smtp_username
+    update_attributes(smtp_username: generate_smtp_username)
+  end
+
+  def generate_smtp_username
+    encoded_name = name.downcase.tr(" ", "_")
     # By appending the id we can be confident that this name is globally unique
-    update_attributes(smtp_username: name.downcase.gsub(" ", "_") + "_" + id.to_s)
+    "#{encoded_name}_#{id}"
+  end
+
+  def generate_key
+    SecureRandom.base58(20)
   end
 end

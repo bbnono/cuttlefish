@@ -1,0 +1,11 @@
+{
+  apps {
+    id
+    name
+  }
+  viewer {
+    name
+    email
+    siteAdmin
+  }
+}

@@ -1,6 +1,8 @@
-FactoryGirl.define do
+# frozen_string_literal: true
+
+FactoryBot.define do
   factory :app do
     team
-    name "My App"
+    name { "My App" }
   end
 end

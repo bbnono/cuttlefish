@@ -1,0 +1,13 @@
+mutation($attributes: AppAttributes!) {
+  createApp(attributes: $attributes) {
+    app {
+      id
+      name
+    }
+    errors {
+      message
+      path
+      type
+    }
+  }
+}

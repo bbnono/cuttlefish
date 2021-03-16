@@ -16,7 +16,24 @@
 
 cuttlefish.sublime-workspace
 db/emails/development
+db/emails/test
 db/archive
 config/newrelic.yml
 coverage
 .vagrant
+
+provisioning/roles/newrelic.newrelic-infra
+provisioning/roles/rvm.ruby
+provisioning/roles/geerlingguy.certbot
+provisioning/roles/DavidWittman.redis
+provisioning/roles/ANXS.postgresql
+provisioning/roles/abtris.nginx-passenger
+provisioning/roles/nickhammond.logrotate
+
+postfix_log/supervisor/*.log
+postfix_log/maillog
+postfix_log/messages
+
+# Use ansible as a virtualenv if you want
+ansible-2.5
+ansible-2.6

@@ -1,17 +1,23 @@
-class TeamsController < ApplicationController
-  after_action :verify_authorized
+# frozen_string_literal: true
 
+class TeamsController < ApplicationController
   def index
-    authorize :team
-    @teams = Team.all
-    @admin = Admin.new
+    # TODO: Check for errors
+    result = api_query
+    @data = result.data
+    @teams = @data.teams
+    @cuttlefish_app = @data.cuttlefish_app
+    @admin = OpenStruct.new(email: nil)
   end
 
   def invite
-    authorize :team
-    team = Team.create!
-    # TODO Add some error checking
-    Admin.invite!({email: params[:admin][:email], team_id: team.id}, current_admin)
+    result = api_query(
+      email: params[:admin][:email],
+      accept_url: accept_admin_invitation_url
+    )
+    @data = result.data
+
+    # TODO: Add some error checking
     flash[:notice] = "Invited #{params[:admin][:email]} to a new team"
     redirect_to teams_path
   end

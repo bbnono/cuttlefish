@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class DeliveryLink < ActiveRecord::Base
   belongs_to :link
   belongs_to :delivery
@@ -11,9 +13,13 @@ class DeliveryLink < ActiveRecord::Base
 
   def add_click_event(request)
     click_events.create!(
-      user_agent: request.env['HTTP_USER_AGENT'],
+      user_agent: request.env["HTTP_USER_AGENT"],
       referer: request.referer,
       ip: request.remote_ip
-    )    
+    )
+  end
+
+  def clicked?
+    !click_events.empty?
   end
 end

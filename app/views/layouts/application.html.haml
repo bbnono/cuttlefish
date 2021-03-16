@@ -10,10 +10,6 @@
     /[if lt IE 9]
       = javascript_include_tag "//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.6.1/html5shiv.js"
     = stylesheet_link_tag "application", media: "all", "data-turbolinks-track" => true
-    %link(href="images/apple-touch-icon-144x144.png" rel="apple-touch-icon-precomposed" sizes="144x144")
-    %link(href="images/apple-touch-icon-114x114.png" rel="apple-touch-icon-precomposed" sizes="114x114")
-    %link(href="images/apple-touch-icon-72x72.png" rel="apple-touch-icon-precomposed" sizes="72x72")
-    %link(href="images/apple-touch-icon.png" rel="apple-touch-icon-precomposed")
     = favicon_link_tag 'cuttlefish.ico'
     = analytics_init if GA.valid_tracker?
 
@@ -40,9 +36,9 @@
               = nav_menu_item_show_active deliveries_path do
                 %i.fa.fa-envelope.fa-fw
                 Emails
-              = nav_menu_item_show_active black_lists_path do
+              = nav_menu_item_show_active deny_lists_path do
                 %i.fa.fa-thumbs-down.fa-fw
-                Blacklist
+                Deny list
               = nav_menu_item_show_active clients_path do
                 %i.fa.fa-mobile.fa-fw
                 Email Clients
@@ -53,10 +49,9 @@
               = nav_menu_item_show_active reputation_path do
                 %i.fa.fa-heart.fa-fw
                 Reputation
-              - if policy(:test_email).new?
-                = nav_menu_item_show_active new_test_email_path do
-                  %i.fa.fa-arrow-right.fa-fw
-                  Test email
+              = nav_menu_item_show_active new_test_email_path do
+                %i.fa.fa-arrow-right.fa-fw
+                Test email
               %li.nav-header Settings
               = nav_menu_item_show_active apps_path do
                 %i.fa.fa-magic.fa-fw
@@ -64,22 +59,20 @@
               = nav_menu_item_show_active admins_path do
                 %i.fa.fa-user.fa-fw
                 Administrators
-              - if current_admin.super_admin?
+              - if @data.viewer.site_admin
                 %li.nav-header Site Admin
-                - if policy(:team).index?
-                  = nav_menu_item_show_active teams_path do
-                    %i.fa.fa-users.fa-fw
-                    Teams
-                = nav_menu_item_show_active sidekiq_web_path do
-                  %i.fa.fa-info-circle.fa-fw
-                  Background jobs
+                = nav_menu_item_show_active teams_path do
+                  %i.fa.fa-users.fa-fw
+                  Teams
+                -# = nav_menu_item_show_active sidekiq_web_path do
+                -#   %i.fa.fa-info-circle.fa-fw
+                -#   Background jobs
 
             %hr
             %ul.nav.nav-list
               %li.nav-header
-                = admin_gravatar(current_admin)
-              - if policy(:registration).edit?
-                %li= link_to "Edit my details", edit_admin_registration_path
+                = admin_gravatar(@data.viewer)
+              %li= link_to "Edit my details", edit_admin_registration_path
               %li= link_to 'Logout', destroy_admin_session_path, method: :delete
             %hr
           .span9

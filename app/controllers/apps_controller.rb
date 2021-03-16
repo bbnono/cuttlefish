@@ -1,91 +1,146 @@
-class AppsController < ApplicationController
-  after_action :verify_authorized, except: :index
-  after_action :verify_policy_scoped, only: :index
+# frozen_string_literal: true
 
+class AppsController < ApplicationController
   def index
-    @apps = policy_scope(App).order(:name)
+    result = api_query
+    @data = result.data
+    @apps = @data.apps
   end
 
   def show
-    @app = App.find(params[:id])
-    authorize @app
+    result = api_query id: params[:id]
+    @data = result.data
+    @app = @data.app
   end
 
   def new
-    @app = App.new
-    authorize @app
+    result = api_query
+    @data = result.data
+    @app = AppForm.new
   end
 
   def create
-    @app = current_admin.team.apps.build(app_parameters)
-    authorize @app
-    if @app.save
+    # TODO: Actually no need for strong parameters here as form object
+    # constrains the parameters that are allowed
+    result = api_query attributes: coerced_app_params
+    if result.data.create_app.app
+      @app = result.data.create_app.app
       flash[:notice] = "App #{@app.name} successfully created"
-      redirect_to @app
+      redirect_to app_url(@app.id)
     else
+      @app = AppForm.new(app_parameters)
+      copy_graphql_errors(result.data.create_app, @app, ["attributes"])
+      # Not ideal that we're doing two graphql requests in the same controller action
+      result = api_query :new, {}
+      @data = result.data
       render :new
     end
   end
 
   def destroy
-    @app = App.find(params[:id])
-    authorize @app
-    flash[:notice] = "App #{@app.name} successfully removed"
-    @app.destroy
-    redirect_to apps_path
-  end
+    result = api_query id: params[:id]
 
-  def edit
-    @app = App.find(params[:id])
-    authorize @app
-  end
-
-  def update
-    @app = App.find(params[:id])
-    authorize @app
-    if @app.update_attributes(app_parameters)
-      flash[:notice] = "App #{@app.name} successfully updated"
-      if app_parameters.has_key?(:from_domain)
-        redirect_to dkim_app_path(@app)
-      else
-        redirect_to @app
-      end
+    if result.data.remove_app.errors.empty?
+      flash[:notice] = "App successfully removed"
+      redirect_to apps_path
     else
-      render :edit
+      # Convert errors to a single string using a form object
+      app = AppForm.new
+      copy_graphql_errors(result.data.remove_app, app, ["attributes"])
+
+      flash[:alert] = app.errors.full_messages.join(", ")
+      redirect_to edit_app_path(params[:id])
     end
   end
 
-  # New password and lock password are currently not linked to from anywhere
-
-  def new_password
-    app = App.find(params[:id])
-    app.new_password!
-    redirect_to app
+  def edit
+    result = api_query id: params[:id]
+    @data = result.data
+    @app = @data.app
   end
 
-  def lock_password
-    app = App.find(params[:id])
-    app.update_attribute(:smtp_password_locked, true)
-    redirect_to app
+  def update
+    result = api_query id: params[:id],
+                       attributes: coerced_app_params
+    if result.data.update_app.app
+      @app = result.data.update_app.app
+      flash[:notice] = "App #{@app.name} successfully updated"
+      if app_parameters.key?(:from_domain)
+        redirect_to dkim_app_path(@app.id)
+      else
+        redirect_to app_path(@app.id)
+      end
+    else
+      @app = AppForm.new(app_parameters.merge(id: params[:id]))
+      copy_graphql_errors(result.data.update_app, @app, ["attributes"])
+
+      if app_parameters.key?(:webhook_url)
+        # Not ideal that we're doing two graphql requests in the same controller action
+        result = api_query :webhook, id: params[:id]
+        @data = result.data
+        render :webhook
+      else
+        # Not ideal that we're doing two graphql requests in the same controller action
+        # TODO: Fix hacky thing that we're doing api_query :new to only get the viewer
+        result = api_query :new, {}
+        @data = result.data
+        render :edit
+      end
+    end
   end
 
   def dkim
-    @app = App.find(params[:id])
-    authorize @app
+    result = api_query id: params[:id]
+    @data = result.data
+    @app = @data.app
     @provider = params[:provider]
   end
 
+  def webhook
+    result = api_query id: params[:id]
+    @data = result.data
+    @app = @data.app
+  end
+
   def toggle_dkim
-    app = App.find(params[:id])
-    authorize app
-    app.update_attribute(:dkim_enabled, !app.dkim_enabled)
-    redirect_to app
+    # First do a query
+    result = api_query :toggle_dkim_query, id: params[:id]
+    dkim_enabled = result.data.app.dkim_enabled
+    # Then write the changes using the api
+    result = api_query :update,
+                       id: params[:id],
+                       attributes: { dkimEnabled: !dkim_enabled }
+    if result.data.update_app.app.nil?
+      # Convert errors to a single string using a form object
+      app = AppForm.new
+      copy_graphql_errors(result.data.update_app, app, ["attributes"])
+
+      flash[:alert] = app.errors.full_messages.join(", ")
+    end
+    redirect_to app_url(params[:id])
+  end
+
+  def upgrade_dkim
+    result = api_query id: params[:id]
+    app = result.data.upgrade_app_dkim.app
+    flash[:notice] =
+      "App #{app.name} successfully upgraded to use the new DNS settings"
+    redirect_to app_url(app.id)
   end
 
   private
 
+  def coerced_app_params
+    result = coerce_params(app_parameters, AppForm)
+    # Doing an extra bit of type conversion here
+    result.delete("webhookUrl") if result["webhookUrl"].blank?
+    result
+  end
+
   def app_parameters
-    params.require(:app).permit(:name, :url, :custom_tracking_domain, :open_tracking_enabled,
-      :click_tracking_enabled, :from_domain)
+    params.require(:app).permit(
+      :name, :url, :custom_tracking_domain, :open_tracking_enabled,
+      :click_tracking_enabled, :from_domain, :webhook_url
+    )
   end
 end

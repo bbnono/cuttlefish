@@ -1,21 +1,41 @@
 .page-header
   %h1= @app.name
 
+- if @app.dkim_enabled && @app.permissions.dkim? && @app.dkim_dns_record.upgrade_required
+  .alert.alert-info
+    %p
+      %i.fa.fa-exclamation-circle
+      Please upgrade your DNS record for DKIM.
+    %p
+      To support multiple apps using
+      the same domain, we're updating the format of the DNS record for DKIM.
+      In the meantime things will continue to work with the old DNS record.
+    %p= link_to "Upgrade DNS settings", dkim_app_path(@app.id), class: "btn"
+
+
 %ul
-  %li= link_to "Emails sent via this app", app_deliveries_path(@app)
+  %li= link_to "Emails sent via this app", app_deliveries_path(@app.id)
   - unless @app.cuttlefish?
     %li= link_to "How to send mail via Cuttlefish for #{@app.name}", documentation_path(anchor: "app-#{@app.id}")
 
-- if policy(@app).edit?
-  %p= link_to "Edit Settings", edit_app_path(@app), class: "btn"
+- if @app.permissions.update?
+  %p= link_to "Edit Settings", edit_app_path(@app.id), class: "btn"
 
-- if @app.dkim_enabled && policy(@app).toggle_dkim?
+- if @app.dkim_enabled && @app.permissions.dkim?
   %hr
   %h3 Improve delivery
   %p
     DomainKeys Identified Mail (DKIM) improves the delivery of your emails by automatically cryptographically
     signing each email so that the recipient can check that it was indeed sent by you.
-  = button_to "Disable DKIM", toggle_dkim_app_path(@app), class: "btn btn-primary"
-- elsif !@app.dkim_enabled && policy(@app).dkim?
+  = button_to "Disable DKIM", toggle_dkim_app_path(@app.id), class: "btn btn-primary"
+- elsif !@app.dkim_enabled && @app.permissions.dkim?
   %h3 What to do next
-  %p= link_to "Transparently send mail from your own domain", dkim_app_path(@app)
+  %p= link_to "Transparently send mail from your own domain", dkim_app_path(@app.id)
+
+%h3 Event Webhook
+%p
+  Integrate your web application more closely with Cuttlefish by getting Cuttlefish
+  to send a callback to a endpoint of your choosing whenever an email for this
+  app is delivered.
+
+%p= link_to "Setting and documentation for webhook", webhook_app_path(@app.id)

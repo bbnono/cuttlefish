@@ -1,4 +1,6 @@
-class AddStatusToDeliveries < ActiveRecord::Migration
+# frozen_string_literal: true
+
+class AddStatusToDeliveries < ActiveRecord::Migration[4.2]
   def change
     add_column :deliveries, :status, :string, null: false
     Delivery.reset_column_information

@@ -1,0 +1,9 @@
+mutation($id: ID!) {
+  removeApp(id: $id) {
+    errors {
+      message
+      path
+      type
+    }
+  }
+}

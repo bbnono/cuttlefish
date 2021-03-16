@@ -1,0 +1,28 @@
+query($appId: ID, $dsn: String, $limit: Int, $offset: Int) {
+  blockedAddresses(appId: $appId, dsn: $dsn, limit: $limit, offset: $offset) {
+    totalCount
+    nodes {
+      id
+      address
+      app {
+        name
+      }
+      becauseOfDeliveryEvent {
+        dsn
+        extendedStatus
+        time
+        email {
+          id
+        }
+      }
+    }
+  }
+  apps {
+    id
+    name
+  }
+  viewer {
+    email
+    siteAdmin
+  }
+}

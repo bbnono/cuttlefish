@@ -1,12 +1,17 @@
-class Filters::MailerHeader < Filters::Base
-  attr_accessor :version
+# frozen_string_literal: true
 
-  def initialize(options)
-    @version = options[:version]
-  end
+module Filters
+  class MailerHeader < Filters::Base
+    attr_accessor :version
 
-  def filter_mail(mail)
-    mail.header['X-Mailer'] = "Cuttlefish #{version}"
-    mail
+    def initialize(version:)
+      super()
+      @version = version
+    end
+
+    def filter_mail(mail)
+      mail.header["X-Mailer"] = "Cuttlefish #{version}"
+      mail
+    end
   end
 end

@@ -1,113 +1,95 @@
-Rails.application.routes.draw do
-  devise_for :admins, controllers: {
-    sessions: "admins/sessions",
-    registrations: "admins/registrations",
-    passwords: "admins/passwords",
-    invitations: "invitations"
-  }
+# frozen_string_literal: true
 
-  require 'sidekiq/web'
-  authenticate :admin, lambda { |u| u.super_admin? } do
-    mount Sidekiq::Web => '/sidekiq'
+Rails.application.routes.draw do
+  mount GraphiQL::Rails::Engine, at: "/graphiql", graphql_path: "/graphql" if Rails.env.development?
+  post "/graphql", to: "graphql#execute"
+  devise_for :admins, only: []
+
+  resource :session,
+           only: [],
+           as: "admin_session",
+           path: "/admins",
+           controller: "admins/sessions" do
+    get :new, path: "sign_in", as: "new"
+    post :create, path: "sign_in"
+    match :destroy, path: "sign_out", as: "destroy", via: :delete
   end
 
-  resources :admins, only: [:index]
-  resources :emails, only: [:index, :show], as: :deliveries, controller: "deliveries"
+  resource :registration,
+           only: %i[new create edit update destroy],
+           as: "admin_registration",
+           path: "/admins",
+           controller: "admins/registrations",
+           path_names: { new: "sign_up" }
+
+  resource :invitation,
+           only: %i[create update],
+           as: "admin_invitation",
+           path: "/admins/invitation" do
+    get :edit, path: "accept", as: :accept
+  end
+
+  resource :password,
+           only: %i[new create edit update],
+           as: "admin_password",
+           path: "/admins/password",
+           controller: "admins/passwords"
+
+  # TODO: the sidekiq ui should be part of the API part of Cuttlefish and not
+  # part of the admin interface
+  # We want to get rid of the use of sidekiq (by making the smtp server talk
+  # to cuttlefish via the graphql api) and there is no immediate super easy
+  # way to do authentication and check that the user is a site_admin.
+  # So, disabling it for the moment. Let's hope we don't need it in an emergency
+  # require "sidekiq/web"
+  # authenticate :admin, ->(u) { u.site_admin? } do
+  #   mount Sidekiq::Web => "/sidekiq"
+  # end
+
+  resources :admins, only: %i[index destroy]
+  resources :emails, only: %i[index show], as: :deliveries,
+                     controller: "deliveries"
   # Allow "." in the id's by using the constraint
-  resources :addresses, only: [], constraints: {id: /[^\/]+/} do
+  resources :addresses, only: [], constraints: { id: %r{[^/]+} } do
     member do
       get :from
       get :to
     end
   end
-  resources :test_emails, only: [:new, :create]
+  resources :test_emails, only: %i[new create]
   resources :apps do
     resources :emails, only: :index, as: :deliveries, controller: "deliveries"
+    resources :clients, only: :index, as: :clients, controller: "clients"
+    resources :deny_lists, only: %i[index destroy], as: :deny_lists, controller: "deny_lists"
+
     member do
-      post 'new_password'
-      post 'lock_password'
-      get 'dkim'
-      post 'toggle_dkim'
+      get "dkim"
+      get "webhook"
+      post "toggle_dkim"
+      post "upgrade_dkim"
     end
   end
 
-  resources :black_lists, only: [:index, :destroy]
+  resources :deny_lists, only: %i[index destroy]
   resources :teams, only: :index do
     collection do
-      post 'invite'
+      post "invite"
     end
   end
 
   resources :clients, only: :index
 
-  # The priority is based upon order of creation: first created -> highest priority.
-  # See how all your routes lay out with "rake routes".
+  root to: "landing#index"
 
-  root to: 'landing#index'
-  post 'request_invitation' => 'landing#request_invitation'
-
-  get 'dash' => 'main#index'
-  get 'status_counts' => 'main#status_counts'
-  get 'reputation' => 'main#reputation'
+  get "dash" => "main#index"
+  get "status_counts" => "main#status_counts"
+  get "reputation" => "main#reputation"
 
   # Open tracking gifs
-  # Deprecating the first form of the url
-  get 'o/:delivery_id/:hash' => 'tracking#open', as: "tracking_open"
-  get 'o2/:delivery_id/:hash' => 'tracking#open2', as: "tracking_open2"
+  get "o2/:delivery_id/:hash" => "tracking#open", as: "tracking_open"
 
   # Link tracking
-  # Deprecating the first form of the url
-  get 'l/:delivery_link_id/:hash' => 'tracking#click', as: "tracking_click"
-  get 'l2/:delivery_link_id/:hash' => 'tracking#click2', as: "tracking_click2"
+  get "l2/:delivery_link_id/:hash" => "tracking#click", as: "tracking_click"
 
-  get '/documentation' => 'documentation#index'
-
-  # Example of regular route:
-  #   get 'products/:id' => 'catalog#view'
-
-  # Example of named route that can be invoked with purchase_url(id: product.id)
-  #   get 'products/:id/purchase' => 'catalog#purchase', as: :purchase
-
-  # Example resource route (maps HTTP verbs to controller actions automatically):
-  #   resources :products
-
-  # Example resource route with options:
-  #   resources :products do
-  #     member do
-  #       get 'short'
-  #       post 'toggle'
-  #     end
-  #
-  #     collection do
-  #       get 'sold'
-  #     end
-  #   end
-
-  # Example resource route with sub-resources:
-  #   resources :products do
-  #     resources :comments, :sales
-  #     resource :seller
-  #   end
-
-  # Example resource route with more complex sub-resources:
-  #   resources :products do
-  #     resources :comments
-  #     resources :sales do
-  #       get 'recent', on: :collection
-  #     end
-  #   end
-
-  # Example resource route with concerns:
-  #   concern :toggleable do
-  #     post 'toggle'
-  #   end
-  #   resources :posts, concerns: :toggleable
-  #   resources :photos, concerns: :toggleable
-
-  # Example resource route within a namespace:
-  #   namespace :admin do
-  #     # Directs /admin/products/* to Admin::ProductsController
-  #     # (app/controllers/admin/products_controller.rb)
-  #     resources :products
-  #   end
+  get "/documentation" => "documentation#index"
 end

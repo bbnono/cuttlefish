@@ -1,4 +1,6 @@
-class AddNullConstraintsToPostfixLogLines < ActiveRecord::Migration
+# frozen_string_literal: true
+
+class AddNullConstraintsToPostfixLogLines < ActiveRecord::Migration[4.2]
   def change
     PostfixLogLine.where(delivery_id: nil).delete_all
     change_column :postfix_log_lines, :time, :datetime, null: false

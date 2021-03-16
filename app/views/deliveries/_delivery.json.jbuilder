@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 json.id delivery.id
 json.from_address do
   json.id delivery.email.from_address.id
@@ -15,6 +17,7 @@ json.email_id delivery.email.id
 json.data_hash delivery.email.data_hash
 json.created_at delivery.created_at
 json.updated_at delivery.updated_at
+json.ignore_deny_list delivery.email.ignore_deny_list
 json.app do
   json.id delivery.email.app.id
   json.name delivery.email.app.name
@@ -49,3 +52,4 @@ json.tracking do
     json.extended_status postfix_log_line.extended_status
   end
 end
+json.meta_values Hash[delivery.email.meta_values.map { |a| [a.key, a.value] }]

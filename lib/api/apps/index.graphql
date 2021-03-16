@@ -1,0 +1,14 @@
+{
+  apps {
+    id
+    name
+    dkimEnabled
+    dkimDnsRecord {
+      upgradeRequired
+    }
+  }
+  viewer {
+    email
+    siteAdmin
+  }
+}

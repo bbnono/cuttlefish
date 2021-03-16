@@ -1,0 +1,20 @@
+{
+  teams {
+    admins {
+      email
+      displayName
+    }
+    apps {
+      id
+      name
+    }
+  }
+  cuttlefishApp {
+    id
+    name
+  }
+  viewer {
+    email
+    siteAdmin
+  }
+}

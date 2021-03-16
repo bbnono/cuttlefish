@@ -1,0 +1,80 @@
+query($id: ID!) {
+  configuration {
+    maxNoEmailsToStore
+  }
+  email(id: $id) {
+    from
+    to
+    subject
+    content {
+      html
+      text
+      source
+    }
+    createdAt
+    status
+    app {
+      id
+      name
+    }
+    opened
+    clicked
+    ignoreBlockedAddresses
+    metaValues {
+      key
+      value
+    }
+    deliveryEvents {
+      time
+      dsn
+      extendedStatus
+    }
+    openEvents {
+      ip {
+        address
+        info {
+          country
+          regionName
+          city
+          isp
+          org
+        }
+      }
+      userAgent {
+        family
+        version
+      }
+      os {
+        family
+        version
+      }
+      createdAt
+    }
+    clickEvents {
+      url
+      ip {
+        address
+        info {
+          country
+          regionName
+          city
+          isp
+          org
+        }
+      }
+      userAgent {
+        family
+        version
+      }
+      os {
+        family
+        version
+      }
+      createdAt
+    }
+  }
+  viewer {
+    email
+    siteAdmin
+  }
+}

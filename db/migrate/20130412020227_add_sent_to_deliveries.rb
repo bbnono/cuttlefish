@@ -1,4 +1,6 @@
-class AddSentToDeliveries < ActiveRecord::Migration
+# frozen_string_literal: true
+
+class AddSentToDeliveries < ActiveRecord::Migration[4.2]
   def change
     # For any preexisting rows set the value to true
     add_column :deliveries, :sent, :boolean, null: false, default: true

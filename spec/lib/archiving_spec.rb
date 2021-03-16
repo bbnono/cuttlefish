@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 describe Archiving do
@@ -13,7 +15,11 @@ describe Archiving do
       :email,
       app: app,
       id: 1753541,
-      from_address: create(:address, id: 12, text: "bounces@planningalerts.org.au"),
+      from_address: create(
+        :address,
+        id: 12,
+        text: "bounces@planningalerts.org.au"
+      ),
       data_hash: "aa126db79482378ce17b441347926570228f12ef",
       message_id: "538ef46757549_443e4bb0f901893332@kedumba.mail",
       subject: "1 new planning application"
@@ -21,25 +27,23 @@ describe Archiving do
   end
 
   describe ".archive" do
-    around do |example|
-      # Silence debugging output from this method
-      silence_stream(STDOUT) do
-        example.run
-      end
-    end
-
     before do
-      create(:delivery, created_at: "2014-06-04T20:26:51.000+10:00", email: email)
+      create(
+        :delivery,
+        created_at: "2014-06-04T20:26:51.000+10:00",
+        email: email
+      )
     end
 
     context "when uploading to S3 succeeds" do
       before do
         # Mock the success response from .copy_to_s3
-        allow(Archiving).to receive(:copy_to_s3).with("2014-06-04").and_return(true)
+        allow(Archiving).to receive(:copy_to_s3)
+          .with("2014-06-04").and_return(true)
       end
 
       it "removes the temp archive file it creates" do
-        Archiving.archive("2014-06-04")
+        Archiving.archive("2014-06-04", noisy: false)
 
         expect(File.exist?("db/archive/2014-06-04.tar.gz")).to be false
       end
@@ -47,7 +51,8 @@ describe Archiving do
 
     context "when uploading to S3 doesn't happen" do
       before do
-        allow(Archiving).to receive(:copy_to_s3).with("2014-06-04").and_return(nil)
+        allow(Archiving).to receive(:copy_to_s3)
+          .with("2014-06-04").and_return(nil)
       end
 
       after do
@@ -56,7 +61,7 @@ describe Archiving do
       end
 
       it "does not delete the local copy" do
-        Archiving.archive("2014-06-04")
+        Archiving.archive("2014-06-04", noisy: false)
 
         expect(File.exist?("db/archive/2014-06-04.tar.gz")).to be true
       end
@@ -65,7 +70,8 @@ describe Archiving do
 
   describe ".unarchive" do
     before do
-      allow(Archiving).to receive(:archive_directory).and_return("spec/fixtures/archive")
+      allow(Archiving).to receive(:archive_directory)
+        .and_return("spec/fixtures/archive")
     end
 
     it "reloads deliveries into the database" do
@@ -76,7 +82,15 @@ describe Archiving do
   end
 
   describe ".serialise" do
-    let!(:click_event) { create(:click_event, user_agent: "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0", ip: "1.2.3.4", created_at: "2014-06-04T20:33:53.000+10:00") }
+    let!(:click_event) do
+      create(
+        :click_event,
+        user_agent: "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:24.0) " \
+                    "Gecko/20100101 Firefox/24.0",
+        ip: "1.2.3.4",
+        created_at: "2014-06-04T20:33:53.000+10:00"
+      )
+    end
     let(:delivery) do
       create(
         :delivery,
@@ -96,19 +110,30 @@ describe Archiving do
       create(
         :open_event,
         delivery: delivery,
-        user_agent: "Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.0.7) Gecko/2009021910 Firefox/3.0.7 (via ggpht.com GoogleImageProxy)",
+        user_agent:
+          "Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.0.7) " \
+          "Gecko/2009021910 Firefox/3.0.7 " \
+          "(via ggpht.com GoogleImageProxy)",
         ip: "2.3.4.5",
         created_at: "2014-10-06T16:05:52.000+11:00"
       )
       create(
         :delivery_link,
         delivery: delivery,
-        link: create(:link, id: 123, url: "http://www.planningalerts.org.au/alerts/abc1234/area")
+        link: create(
+          :link,
+          id: 123,
+          url: "http://www.planningalerts.org.au/alerts/abc1234/area"
+        )
       )
       create(
         :delivery_link,
         delivery: delivery,
-        link: create(:link, id: 321, url: "http://www.planningalerts.org.au/alerts/abc1234/unsubscribe")
+        link: create(
+          :link,
+          id: 321,
+          url: "http://www.planningalerts.org.au/alerts/abc1234/unsubscribe"
+        )
       )
       create(
         :postfix_log_line,
@@ -118,29 +143,30 @@ describe Archiving do
         delay: "1.7",
         delays: "0.05/0/0.58/1",
         dsn: "2.0.0",
-        extended_status: "sent (250 2.0.0 OK 1401877617 bh2si4687161pbb.204 - gsmtp)"
+        extended_status:
+          "sent (250 2.0.0 OK 1401877617 bh2si4687161pbb.204 - gsmtp)"
       )
+      create(:meta_value, email: email, key: "foo", value: "bar")
+      create(:meta_value, email: email, key: "wibble", value: "wobble")
     end
 
-    it "produces the same results with a Delivery object created directly as one created with .deserialise from a previously serialised Delivery" do
+    it "produces the same results with a Delivery object " \
+       "created directly as one created with .deserialise " \
+       "from a previously serialised Delivery" do
       s1 = Archiving.serialise(delivery)
 
-      delivery.destroy
+      email.destroy
       delivery = Archiving.deserialise(s1)
       s2 = Archiving.serialise(delivery)
 
       expect(s1).to eq s2
     end
+
+    # For a test of the exact serialisation format see
+    # spec/views/deliveries/show.json.erb_spec.rb
   end
 
   describe ".copy_to_s3" do
-    around do |example|
-      # Silence debugging output from this method
-      silence_stream(STDOUT) do
-        example.run
-      end
-    end
-
     context "when AWS access is configured" do
       around do |test|
         with_modified_env mock_aws_credentials do
@@ -149,13 +175,20 @@ describe Archiving do
       end
 
       before do
-        fixture_archive_file = File.open("spec/fixtures/archive/2014-06-04.tar.gz")
-        allow(File).to receive(:open).with("db/archive/2014-06-04.tar.gz") { fixture_archive_file }
+        fixture_archive_file = File.open(
+          "spec/fixtures/archive/2014-06-04.tar.gz"
+        )
+        allow(File).to receive(:open).with("db/archive/2014-06-04.tar.gz") do
+          fixture_archive_file
+        end
       end
 
       it "sends a copy to S3" do
         VCR.use_cassette("aws") do
-          expect(Archiving.copy_to_s3("2014-06-04")).to be_instance_of Fog::Storage::AWS::File
+          # TODO: Silence debugging output from this method
+          expect(Archiving.copy_to_s3("2014-06-04", noisy: false)).to be_instance_of(
+            Fog::Storage::AWS::File
+          )
         end
       end
     end
@@ -168,7 +201,8 @@ describe Archiving do
       end
 
       it "fails silently" do
-        expect(Archiving.copy_to_s3("2014-06-04")).to eq nil
+        # TODO: Silence debugging output from this method
+        expect(Archiving.copy_to_s3("2014-06-04", noisy: false)).to eq nil
       end
     end
   end

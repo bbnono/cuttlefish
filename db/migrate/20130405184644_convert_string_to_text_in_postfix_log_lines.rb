@@ -1,4 +1,6 @@
-class ConvertStringToTextInPostfixLogLines < ActiveRecord::Migration
+# frozen_string_literal: true
+
+class ConvertStringToTextInPostfixLogLines < ActiveRecord::Migration[4.2]
   def up
     change_column :postfix_log_lines, :text, :text, limit: nil
   end

@@ -1,0 +1,54 @@
+%h3 Special Headers
+
+%p
+  By setting special headers in the email content you can make some special things happen.
+
+%h4 X-Cuttlefish-Ignore-Deny-List
+
+%p
+  If you set this to "true", the email will get sent even if the destination
+  address is on the "deny list". Note that if the email hard bounces the destination
+  address will still get added to the deny list.
+
+%p
+  Only use this in very exceptional circumstances where
+  you have a low volume of email going to an email address that you're very
+  confident should work and you absolutely don't want emails to not get sent.
+
+%p
+  One example of this is sending emails to a known and fixed email address of
+  a government agency. We <strong>really</strong> want those emails to arrive as much as
+  possible.
+
+%p An example of the header in use:
+
+:coderay
+  #!plain
+  From: foo@bar.com
+  To: wibble@wobble.com
+  X-Cuttlefish-Ignore-Deny-List: true
+  Subject: Hello
+
+  Hello!
+
+%h4 X-Cuttlefish-Metadata
+
+%p
+  You can set custom metadata (consisting of key/value string pairs) which gets stored
+  with the email in cuttlefish and is displayed in the interface on the email
+  detail page. You can use this, for instance, to record the `user-id` in your system
+  connected to an email.
+
+%p
+  Convert each key/value pair to a header where the name of the header is prepended by
+  "X-Cuttlefish-Metadata-". For example:
+
+:coderay
+  #!plain
+  From: foo@bar.com
+  To: wibble@wobble.com
+  X-Cuttlefish-Metadata-user-id: 1234
+  X-Cuttlefish-Metadata-type: friendly
+  Subject: Hello
+
+  Hello!

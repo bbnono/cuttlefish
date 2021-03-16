@@ -1,14 +1,14 @@
 .page-header
   %h1
     Emails sent from
-    = @address.text
+    = @from
 
 .row
   .span3
     %p
-      = link_to to_address_path(@address) do
+      = link_to to_address_path(@from) do
         Switch to emails sent
         %strong to
         this address
-    = render "main/status_counts_period", deliveries: @address.deliveries_sent(current_admin.team), link: false
+    = render "main/status_counts_period", stats: @stats, link: false, loading: false
 = render partial: "deliveries/to", locals: {deliveries: @deliveries}

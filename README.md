@@ -1,11 +1,8 @@
-[![Stories in Ready](https://badge.waffle.io/mlandauer/cuttlefish.png?label=ready&title=Ready)](https://waffle.io/mlandauer/cuttlefish)
-
 # ![Cuttlefish](https://raw.github.com/mlandauer/cuttlefish/master/app/assets/images/cuttlefish_80x48.png) Cuttlefish
 
-[![Build Status](https://travis-ci.org/mlandauer/cuttlefish.png?branch=master)](https://travis-ci.org/mlandauer/cuttlefish) [![Coverage Status](https://coveralls.io/repos/mlandauer/cuttlefish/badge.png?branch=master)](https://coveralls.io/r/mlandauer/cuttlefish) [![Code Climate](https://codeclimate.com/github/mlandauer/cuttlefish.png)](https://codeclimate.com/github/mlandauer/cuttlefish)
+[![Build Status](https://travis-ci.org/mlandauer/cuttlefish.svg?branch=master)](https://travis-ci.org/mlandauer/cuttlefish) [![Coverage Status](https://coveralls.io/repos/github/mlandauer/cuttlefish/badge.svg?branch=master)](https://coveralls.io/github/mlandauer/cuttlefish?branch=master) [![Maintainability](https://api.codeclimate.com/v1/badges/abe94fb0811e8e8c512a/maintainability)](https://codeclimate.com/github/mlandauer/cuttlefish/maintainability)
 
 * Project site: [cuttlefish.io](https://cuttlefish.io)
-* Hosted version ([free](http://poplus.org/posts/email-is-your-secret-weapon/) for [Poplus.org](http://poplus.org/) community members): [cuttlefish.oaf.org.au](https://cuttlefish.oaf.org.au)
 * Github repo:  [github.com/mlandauer/cuttlefish](https://github.com/mlandauer/cuttlefish)
 
 Cuttlefish is a lovely, easy to set up transactional email server
@@ -25,41 +22,83 @@ And without the hidden dangers of vendor lock in of commercial transactional ema
 * Statistics on emails sent, soft/hard bounced and held back
 * View the full email content for recently sent emails
 * Multiple applications can each have their own SMTP authentication
+* [GraphQL](https://graphql.org/) API where anything you can do in the admin UI can do with the API
+* Web callbacks on successful or failed deliveries of emails
 * Check your IP reputation with one click
 * Easy to install and get going quickly
 * Built in, super easy to set up, automatic DKIM signing
 * Postfix, which you know and trust, handles email delivery
 * Open source, so no vendor lock in.
 
-Cuttlefish is in beta. It's been used in production on three of [OpenAustralia Foundation](http://www.openaustraliafoundation.org.au)'s projects for over a year and has sent well over 2 million emails.
+Cuttlefish is in beta. It's been used in production by [OpenAustralia Foundation](http://www.openaustraliafoundation.org.au)'s projects for several years and has sent many millions of emails.
 
-##Screenshots
+## Screenshots
 
 ![Sign up](https://raw.github.com/mlandauer/cuttlefish/master/app/assets/images/screenshots/1.png)
 ![Dashboard](https://raw.github.com/mlandauer/cuttlefish/master/app/assets/images/screenshots/2.png)
 ![Email](https://raw.github.com/mlandauer/cuttlefish/master/app/assets/images/screenshots/3.png)
 
-##Things on the cards
+## Things on the cards
 
 * REST API for deep integration with your application
-* Web callbacks on succesful delivery, hard bounces, open and click events
+* Web callbacks on successful delivery, hard bounces, open and click events
 * "out of office" and bounce reply filtering
 * Incoming email
 
-##Dependencies
-Ruby 2.1.5, MySQL, Redis (2.4 or greater), Postfix
-(Postfix is optional for local development or just trying it out. Some things like the email deliverability just won't show anything)
+## Dependencies
+Ruby 2.5.1, PostgresQL, Redis (2.4 or greater), Postfix
 
 Also you need the following libraries:
-imagemagick, libmagickwand-dev, libmysqld-dev
+imagemagick, libmagickwand-dev, libpq-dev
 
-##To install:
+For development, however, the only dependencies are Docker and Docker compose.
+
+## Development
+
+Setting up a local development environment with all the correct dependencies and
+moving parts is now very straightforward by using [Docker](https://www.docker.com/).
+
+To start with:
+```
+docker-compose run web bundle exec rake db:create db:schema:load
+```
+
+Now add some example seed data. This will also create a site admin with email "joy@smart-unlimited.com" and password "password". You'll need these details later to sign in. Skip this step if you don't want seed data.
+
+```
+docker-compose run web bundle exec rake db:seed
+```
+
+Then
+```
+docker-compose up
+```
+
+Those steps will take a little while as they download images and build
+the docker containers.
+
+When its stops spitting output to the console point your web browser at
+
+http://localhost:3000
+
+For development all mail sent out by Cuttlefish will actually go to mailcatcher.
+To see the mailcatcher mail:
+
+http://localhost:1080
+
+To run the tests (do that from another window):
+```
+docker-compose exec web rake
+```
+
+## To install:
 
 We use [Vagrant](https://www.vagrantup.com/) and [Ansible](http://docs.ansible.com/) to automatically set up a fresh server with everything you need to run Cuttlefish. It's a fairly complicated affair as Cuttlefish does have quite a few moving
 parts but all of this is with the purpose of making it easier for the developer sending mail.
 
-These instructions are currently for installing the server at cuttlefish.oaf.org.au. They're not
-yet generic. Maybe you can [help with this](https://github.com/mlandauer/cuttlefish/issues/226)?
+These instructions are specifically for installing the server at https://cuttlefish.oaf.org.au.
+
+Currently the setup requires a relatively old version of Ansible (2.5.0) using Python 2.7.
 
 ### To install to a local test virtual machine
 
@@ -70,12 +109,9 @@ yet generic. Maybe you can [help with this](https://github.com/mlandauer/cuttlef
 vagrant up
 ```
 
-3. Deploy the application. As this is the first deploy it will take quite a while (5 mins or so). Further deploys will be much quicker
+3. Deploy the application. As this is the first deploy it will take quite a while (5 mins or so). Further deploys will be much quicker. We're using the `--set-before local_deploy=true` flag to deploy to your local test virtual machine instead of production.
 ```
-cap deploy:setup
-cap deploy:cold
-cap foreman:export
-cap foreman:restart
+bundle exec cap --set-before local_deploy=true deploy:setup deploy:cold foreman:export foreman:start
 ```
 
 4. Add to your local `/etc/hosts` file
@@ -91,11 +127,11 @@ cap foreman:restart
 
 2. [Add a new Linode](https://manager.linode.com/linodes/add)
 
-3. Select "Linode 2048" at location "Fremont, CA"
+3. Select "Linode 8GB" at location "Fremont, CA"
 
 4. Select your new Linode in the dashboard
 
-5. Click "Deploy a Linux Distribution". Choose "Ubuntu 14.04 LTS" and choose a root password. Leave everything as default.
+5. Click "Deploy a Linux Distribution". Choose "Ubuntu 16.04 LTS" and choose a root password. Leave everything as default.
 
 6. Click "Boot" and wait for it to start up
 
@@ -137,6 +173,25 @@ Some further things to ensure things work smoothly
 
 3. Set up reverse DNS. In the Linode Manager under "Remote Access" click "Reverse DNS" then for the hostname put in "cuttlefish.oaf.org.au" and follow the instructions. This step is necessary in order to be able to sign up to receive [Feedback loop emails](https://en.wikipedia.org/wiki/Feedback_loop_%28email%29).
 
+## Deploying to production
+
+One gotcha is that we're still on Capistrano 2 which doesn't apply database migrations
+by default on deploys.
+
+For normal deploys
+```
+cap deploy
+```
+
+To rollback a failed deploy
+```
+cap deploy:rollback
+```
+
+To deploy and run the migrations
+```
+cap deploy:migrations
+```
 
 ## Screenshots
 Done some development work which updates the look of the main pages? To update the screenshots

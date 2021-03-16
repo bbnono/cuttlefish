@@ -1,8 +1,22 @@
-require File.expand_path File.join(File.dirname(__FILE__), 'mail_worker')
-require 'ostruct'
-require 'eventmachine'
-require 'mail'
-require File.expand_path File.join(File.dirname(__FILE__), "..", "app", "models", "app")
+# frozen_string_literal: true
+
+require File.expand_path File.join(File.dirname(__FILE__), "parse_headers_create_email_worker")
+require File.expand_path File.join(File.dirname(__FILE__), "email_data_cache")
+require "ostruct"
+require "eventmachine"
+require "mail"
+require File.expand_path File.join(
+  File.dirname(__FILE__), "..", "app", "models", "app"
+)
+require File.expand_path File.join(
+  File.dirname(__FILE__), "..", "app", "models", "email"
+)
+require File.expand_path File.join(
+  File.dirname(__FILE__), "..", "app", "models", "address"
+)
+require File.expand_path File.join(
+  File.dirname(__FILE__), "..", "app", "models", "delivery"
+)
 
 class CuttlefishSmtpServer
   attr_accessor :connections
@@ -11,16 +25,18 @@ class CuttlefishSmtpServer
     @connections = []
   end
 
-  def start(host = 'localhost', port = 1025)
-    trap("TERM") {
+  def start(host = "localhost", port = 1025)
+    trap("TERM") do
       puts "Received SIGTERM"
       stop
-    }
-    trap("INT") {
+    end
+    trap("INT") do
       puts "Received SIGINT"
       stop!
-    }
-    @server = EM.start_server host, port, CuttlefishSmtpConnection do |connection|
+    end
+    @server = EM.start_server host,
+                              port,
+                              CuttlefishSmtpConnection do |connection|
       connection.server = self
       @connections << connection
     end
@@ -31,10 +47,10 @@ class CuttlefishSmtpServer
     puts "Stopping server gracefully..."
     EM.stop_server @server
 
-    unless wait_for_connections_and_stop
-      # Still some connections running, schedule a check later
-      EventMachine.add_periodic_timer(1) { wait_for_connections_and_stop }
-    end
+    return if wait_for_connections_and_stop
+
+    # Still some connections running, schedule a check later
+    EventMachine.add_periodic_timer(1) { wait_for_connections_and_stop }
   end
 
   def wait_for_connections_and_stop
@@ -84,13 +100,15 @@ class CuttlefishSmtpConnection < EM::P::SmtpServer
     server.connections.delete(self)
   end
 
+  # rubocop:disable Naming/AccessorMethodName
   def get_server_domain
-    Rails.configuration.cuttlefish_domain
+    Rails.configuration.cuttlefish_smtp_host
   end
 
   def get_server_greeting
     "Cuttlefish SMTP server waves its arms and tentacles and says hello"
   end
+  # rubocop:enable Naming/AccessorMethodName
 
   def receive_sender(sender)
     current.sender = sender
@@ -99,24 +117,81 @@ class CuttlefishSmtpConnection < EM::P::SmtpServer
 
   def receive_recipient(recipient)
     current.recipients = [] if current.recipients.nil?
-    current.recipients << recipient
+    # Convert "<foo@foo.com>" to foo@foo.com
+    current.recipients << recipient.match("<(.*)>")[1]
     true
+  end
+
+  # This is copied from
+  # https://github.com/eventmachine/eventmachine/blob/master/lib/em/protocols/smtpserver.rb
+  # so that it can be monkey-patched. We don't want to completely clear out the
+  # state at the end of a succesfull transaction, especially the auth
+  # information. That's why the `reset_protocol_state` is commented out in the
+  # succeeded proc.
+  # TODO: Put in an upstream patch to address this at source
+  def process_data_line(line)
+    if line == "."
+      unless @databuffer.empty?
+        receive_data_chunk @databuffer
+        @databuffer.clear
+      end
+
+      succeeded = proc {
+        send_data "250 Message accepted\r\n"
+        # reset_protocol_state
+      }
+      failed = proc {
+        send_data "550 Message rejected\r\n"
+        reset_protocol_state
+      }
+      d = receive_message
+
+      if d.respond_to?(:set_deferred_status)
+        d.callback(&succeeded)
+        d.errback(&failed)
+      else
+        (d ? succeeded : failed).call
+      end
+
+      @state -= %i[data mail_from rcpt]
+    else
+      # slice off leading . if any
+      line.slice!(0...1) if line[0] == "."
+      @databuffer << line
+      if @databuffer.length > @@parms[:chunksize]
+        receive_data_chunk @databuffer
+        @databuffer.clear
+      end
+    end
   end
 
   def receive_message
     current.received = true
     current.completed_at = Time.now
 
-    # TODO No need to capture current.sender, current.received, current.completed_at
-    # because we're not passing it on
-    #
-    # Before we send current.data to MailWorker we need to deal with the encoding
-    # because before it gets stored in redis it needs to be serialised to json
-    # which requires a conversion to utf8
-    # It comes in with unknown encoding - so let's encode it as base64
-    MailWorker.perform_async(current.recipients, Base64.encode64(current.data), current.app_id)
+    # TODO: No need to capture current.sender, current.received,
+    # current.completed_at because we're not passing it on
 
-    @current = OpenStruct.new
+    # Store content of email in a temporary file
+    # Note that this depends on having access to the same filesystem as
+    # the worker processes have access to. Currently, that's fine because we're
+    # running everything on a single machine but that assumption might not be
+    # true in the future
+    # Using Tempfile.create rather than Tempfile.new so that the tmp file is
+    # not automatically deleted through garbage collection
+    file = Tempfile.create("cuttlefish", encoding: "ascii-8bit")
+    file.write(current.data)
+    file.close
+
+    # Note the worker will delete the temporary file when it's done
+    ParseHeadersCreateEmailWorker.perform_async(
+      current.recipients,
+      file.path,
+      current.app_id
+    )
+
+    # Preserve the app_id as we are already authenticated
+    @current = OpenStruct.new(app_id: current.app_id)
     true
   end
 
@@ -133,12 +208,12 @@ class CuttlefishSmtpConnection < EM::P::SmtpServer
   end
 
   def receive_data_command
-    current.data = ""
+    current.data = +""
     true
   end
 
   def receive_data_chunk(data)
-    current.data << data.join("\n")
+    current.data << data.join("\r\n")
     true
   end
 

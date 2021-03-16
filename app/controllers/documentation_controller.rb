@@ -1,6 +1,10 @@
+# frozen_string_literal: true
+
 class DocumentationController < ApplicationController
   def index
-    @apps = policy_scope(App)
+    result = api_query
+    @data = result.data
+    @apps = @data.apps
     @active_app = @apps.first
   end
 end

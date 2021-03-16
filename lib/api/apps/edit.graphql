@@ -1,0 +1,13 @@
+query($id: ID!) {
+  app(id: $id) {
+    id
+    name
+    clickTrackingEnabled
+    openTrackingEnabled
+    customTrackingDomain
+  }
+  viewer {
+    email
+    siteAdmin
+  }
+}
